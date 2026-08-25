@@ -167,6 +167,9 @@ impl QdrantStore for Qdrant {
         points: Vec<PointData>,
         batch_size: usize,
     ) -> Result<()> {
+        if points.is_empty() {
+            return Ok(());
+        }
         let request = qdrant_client::qdrant::UpsertPoints {
             collection_name: collection.to_string(),
             wait: Some(true),
