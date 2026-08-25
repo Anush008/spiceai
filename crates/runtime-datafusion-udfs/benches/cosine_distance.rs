@@ -101,7 +101,7 @@ fn scalar_fsl_cosine_distance(a: &ArrayRef, b: &ArrayRef) -> Vec<Option<f64>> {
         .as_any()
         .downcast_ref::<FixedSizeListArray>()
         .expect("FixedSizeListArray");
-    let dim = fsl_a.value_length() as usize;
+    let dim = usize::try_from(fsl_a.value_length()).expect("dim fits in usize");
 
     // The values child of a FixedSizeListArray is a flat Float32Array.
     let flat_a = fsl_a
@@ -205,7 +205,7 @@ fn bench_fsl_f32(c: &mut Criterion) {
     group.finish();
 }
 
-/// Group 2: `List<Float32>` — Spice scalar fallback vs DataFusion `ArrayDistance`.
+/// Group 2: `List<Float32>` — Spice scalar fallback vs `DataFusion` `ArrayDistance`.
 #[expect(clippy::expect_used, reason = "bench setup — panics are acceptable")]
 fn bench_list_f32(c: &mut Criterion) {
     let mut group = c.benchmark_group("cosine_distance/list_f32");

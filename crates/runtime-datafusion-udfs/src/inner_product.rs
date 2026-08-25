@@ -15,11 +15,13 @@ limitations under the License.
 */
 
 //! [`ScalarUDFImpl`] for inner (dot) product of two vectors.
-//!
 //! `inner_product(a, b)` returns `sum(a[i] * b[i])` over the two input vectors.
-//! Both inputs must be `FixedSizeList<Float32, N>` with the same `N`. The kernel
-//! dispatches to SIMD via [`simsimd`]; there is no fallback path for other
-//! element types — the UDF rejects them at coercion.
+//! Both inputs must be `FixedSizeList<Float32, N>` with the same `N`; a
+//! `List<Float32>`/`LargeList<Float32>` argument is promoted to the other
+//! side's FSL type at coercion (e.g. the `embed` UDF's List output against a
+//! stored `FixedSizeList` column). The kernel dispatches to SIMD via [`simsimd`];
+//! there is no fallback path for other element types — the UDF rejects them at
+//! coercion.
 
 use arrow::array::ArrayRef;
 use arrow_schema::DataType;
@@ -146,5 +148,31 @@ mod tests {
         );
         let err = udf.coerce_types(&[lhs, rhs]).expect_err("should reject");
         assert!(err.to_string().contains("matching N"));
+    }
+
+    #[test]
+    fn promotes_list_argument_to_fsl() {
+        let list = DataType::List(std::sync::Arc::new(arrow_schema::Field::new(
+            "embedding",
+            DataType::Float32,
+            true,
+        )));
+        let expected_fsl = || {
+            DataType::FixedSizeList(
+                std::sync::Arc::new(arrow_schema::Field::new("item", DataType::Float32, false)),
+                256,
+            )
+        };
+        let udf = InnerProduct::new();
+        assert_eq!(
+            udf.coerce_types(&[list.clone(), expected_fsl()])
+                .expect("list lhs promotes"),
+            vec![expected_fsl(), expected_fsl()]
+        );
+        assert_eq!(
+            udf.coerce_types(&[expected_fsl(), list])
+                .expect("list rhs promotes"),
+            vec![expected_fsl(), expected_fsl()]
+        );
     }
 }

@@ -107,6 +107,15 @@ pub(crate) fn is_fixed_size_list_f32(dt: &DataType) -> bool {
     matches!(dt, DataType::FixedSizeList(field, _) if field.data_type() == &DataType::Float32)
 }
 
+/// Returns `true` if `dt` is `List<Float32>` or `LargeList<Float32>`.
+pub(crate) fn is_list_f32(dt: &DataType) -> bool {
+    matches!(
+        dt,
+        DataType::List(field) | DataType::LargeList(field)
+            if field.data_type() == &DataType::Float32
+    )
+}
+
 /// Checks that both arg types are `FixedSizeList<Float32, N>` with the same
 /// positive `N`. Rejects `N <= 0` so planner errors surface before hitting the
 /// SIMD kernel.
@@ -127,21 +136,36 @@ pub(crate) fn matching_fixed_size_list_f32(lhs: &DataType, rhs: &DataType) -> Op
 /// Validate that a two-arg UDF call receives matching `FixedSizeList<Float32, N>`
 /// inputs, returning the coerced arg types unchanged. Shared across
 /// `cosine_distance`, `inner_product`, `l2_distance`, `l2_squared_distance`.
+///
+/// Mirrors `CosineDistance::coerce_types` Case 2: when one side is a
+/// `List<Float32>`/`LargeList<Float32>` (e.g. the `embed` UDF's output) and the
+/// other is `FixedSizeList<Float32, N>`, the List side is promoted to the FSL
+/// type so `DataFusion` inserts the cast and the SIMD kernel sees matching FSLs.
 pub(crate) fn coerce_fsl_f32_binary_args(
     udf_name: &str,
     arg_types: &[DataType],
 ) -> DataFusionResult<Vec<DataType>> {
+    use crate::vector_simd::is_list_f32;
+
     if arg_types.len() != 2 {
         return exec_err!("{udf_name} expects exactly two arguments");
     }
-    if matching_fixed_size_list_f32(&arg_types[0], &arg_types[1]).is_none() {
-        return exec_err!(
-            "{udf_name} requires both arguments to be FixedSizeList<Float32, N> with matching N, got {:?} and {:?}",
-            arg_types[0],
-            arg_types[1]
-        );
+    let lhs = &arg_types[0];
+    let rhs = &arg_types[1];
+    if matching_fixed_size_list_f32(lhs, rhs).is_some() {
+        return Ok(vec![lhs.clone(), rhs.clone()]);
     }
-    Ok(vec![arg_types[0].clone(), arg_types[1].clone()])
+    if is_list_f32(lhs) && is_fixed_size_list_f32(rhs) {
+        return Ok(vec![rhs.clone(), rhs.clone()]);
+    }
+    if is_fixed_size_list_f32(lhs) && is_list_f32(rhs) {
+        return Ok(vec![lhs.clone(), lhs.clone()]);
+    }
+    exec_err!(
+        "{udf_name} requires both arguments to be FixedSizeList<Float32, N> with matching N, got {:?} and {:?}",
+        lhs,
+        rhs
+    )
 }
 
 /// Validate arg shape for a two-arg UDF and return `Float64` as the return type.
