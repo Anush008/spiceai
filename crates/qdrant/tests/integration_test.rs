@@ -177,4 +177,31 @@ async fn collection_lifecycle_upsert_search_scroll_delete() {
     let remaining_ids: Vec<PointId> = remaining.into_iter().map(|r| r.id).collect();
     assert!(remaining_ids.contains(&id_b));
     assert!(remaining_ids.contains(&id_c));
+
+    // An empty write is a valid no-op and must not issue an invalid Qdrant request.
+    store
+        .upsert(&collection, Vec::new(), 0)
+        .await
+        .expect("empty upsert");
+
+    // Re-upserting an existing id replaces its vector and payload, even when the
+    // configured batch size is zero (which selects the client default).
+    store
+        .upsert(
+            &collection,
+            vec![point("b", vec![1.0, 0.0, 0.0, 0.0], "updated")],
+            0,
+        )
+        .await
+        .expect("replace point");
+    let replaced = store
+        .search(&collection, vec![1.0, 0.0, 0.0, 0.0], 1, None)
+        .await
+        .expect("search replaced point");
+    assert_eq!(replaced.len(), 1);
+    assert_eq!(replaced[0].id, id_b);
+    assert_eq!(
+        replaced[0].payload.get("tag").and_then(|v| v.kind.as_ref()),
+        Some(&Kind::StringValue("updated".to_string()))
+    );
 }

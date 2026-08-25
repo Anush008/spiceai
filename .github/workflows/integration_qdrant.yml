@@ -10,9 +10,9 @@ on:
       - 'crates/data_components/src/qdrant/**'
       - 'crates/search/src/index/qdrant/**'
       - 'crates/runtime/src/embeddings/index/qdrant.rs'
-      - 'crates/runtime-search/src/store_params/qdrant.rs'
-      - 'crates/runtime-datafusion-udfs/**'
-      - 'bin/spiced/Cargo.toml'
+            - 'crates/runtime-search/src/store_params/qdrant.rs'
+            - 'crates/runtime-datafusion-udfs/**'
+            - 'bin/spiced/Cargo.toml'
   merge_group:
     branches:
       - trunk
